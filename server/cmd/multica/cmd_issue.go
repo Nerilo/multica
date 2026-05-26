@@ -1002,13 +1002,10 @@ func runIssueCommentList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("list comments: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "Showing %d comments.\n", len(comments))
-	// The server emits the next-page cursor in headers when there is likely
-	// an older page. Surface it on stderr so an operator (and the agent
-	// prompt update that follows this PR) can scroll deeper without having
-	// to dig into the raw HTTP response. Label depends on which paging mode
-	// the caller is in — under --recent the cursor is a thread cursor;
-	// under --thread + --tail it is a reply cursor inside that thread.
+	output, _ := cmd.Flags().GetString("output")
+	if output != "json" {
+		fmt.Fprintf(os.Stderr, "Showing %d comments.\n", len(comments))
+	}
 	if nb := respHeaders.Get("X-Multica-Next-Before"); nb != "" {
 		if nbid := respHeaders.Get("X-Multica-Next-Before-Id"); nbid != "" {
 			label := "Next thread cursor"
@@ -1018,8 +1015,6 @@ func runIssueCommentList(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(os.Stderr, "%s: --before %s --before-id %s\n", label, nb, nbid)
 		}
 	}
-
-	output, _ := cmd.Flags().GetString("output")
 	if output == "json" {
 		return cli.PrintJSON(os.Stdout, comments)
 	}

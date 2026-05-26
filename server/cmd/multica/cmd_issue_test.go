@@ -1780,6 +1780,166 @@ func TestRunIssueCommentList_RecentStillLabelsCursorAsThread(t *testing.T) {
 	}
 }
 
+// stdoutCapture redirects os.Stdout through a pipe so a test can assert on
+// the JSON output written by runIssueCommentList.
+type stdoutCapture struct {
+	t       *testing.T
+	orig    *os.File
+	r, w    *os.File
+	out     strings.Builder
+	doneCh  chan struct{}
+	stopped bool
+}
+
+func captureStdout(t *testing.T) *stdoutCapture {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	c := &stdoutCapture{t: t, orig: os.Stdout, r: r, w: w, doneCh: make(chan struct{})}
+	os.Stdout = w
+	go func() {
+		buf, _ := io.ReadAll(r)
+		c.out.Write(buf)
+		close(c.doneCh)
+	}()
+	return c
+}
+
+func (c *stdoutCapture) restore() {
+	if c.stopped {
+		return
+	}
+	c.stopped = true
+	os.Stdout = c.orig
+	_ = c.w.Close()
+	<-c.doneCh
+	_ = c.r.Close()
+}
+
+func (c *stdoutCapture) read() string {
+	c.restore()
+	return c.out.String()
+}
+
+// TestRunIssueCommentList_OutputJSON_PureStdout verifies the fix for the
+// regression where `multica issue comment list --output json` prepended a
+// human-readable "Showing N comments." line before the JSON array. With
+// --output json, stdout must be pure JSON; the "Showing" line must only
+// appear on stderr in table mode. Cursor hints on stderr must remain in
+// both modes so agents can still discover pagination cursors.
+func TestRunIssueCommentList_OutputJSON_PureStdout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/issues/") && !strings.Contains(r.URL.Path, "/comments") {
+			json.NewEncoder(w).Encode(map[string]any{
+				"id":         "issue-1",
+				"identifier": "MUL-1",
+			})
+			return
+		}
+		w.Header().Set("X-Multica-Next-Before", "2026-01-01T00:00:00.000000001Z")
+		w.Header().Set("X-Multica-Next-Before-Id", "00000000-0000-0000-0000-000000000777")
+		w.Write([]byte(`[{"id":"c1","content":"hello"}]`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("MULTICA_SERVER_URL", srv.URL)
+	t.Setenv("MULTICA_WORKSPACE_ID", "ws-1")
+	t.Setenv("MULTICA_TOKEN", "test-token")
+
+	t.Run("json_mode_stdout_is_pure_json", func(t *testing.T) {
+		stdout := captureStdout(t)
+		defer stdout.restore()
+		stderr := captureStderr(t)
+		defer stderr.restore()
+
+		cmd := newIssueCommentListTestCmd()
+		if err := cmd.Flags().Set("output", "json"); err != nil {
+			t.Fatalf("set output: %v", err)
+		}
+		if err := runIssueCommentList(cmd, []string{"MUL-1"}); err != nil {
+			t.Fatalf("runIssueCommentList: %v", err)
+		}
+
+		stdoutStr := stdout.read()
+		stderrStr := stderr.read()
+
+		if strings.Contains(stdoutStr, "Showing") {
+			t.Errorf("stdout should not contain 'Showing' in JSON mode, got: %q", stdoutStr)
+		}
+		if !json.Valid([]byte(stdoutStr)) {
+			t.Errorf("stdout is not valid JSON, got: %q", stdoutStr)
+		}
+		if strings.Contains(stderrStr, "Showing") {
+			t.Errorf("stderr should not contain 'Showing' in JSON mode, got: %q", stderrStr)
+		}
+		if !strings.Contains(stderrStr, "Next thread cursor:") {
+			t.Errorf("stderr should still contain cursor hint in JSON mode, got: %q", stderrStr)
+		}
+	})
+
+	t.Run("table_mode_stderr_has_showing", func(t *testing.T) {
+		stderr := captureStderr(t)
+		defer stderr.restore()
+
+		cmd := newIssueCommentListTestCmd()
+		if err := cmd.Flags().Set("output", "table"); err != nil {
+			t.Fatalf("set output: %v", err)
+		}
+		if err := runIssueCommentList(cmd, []string{"MUL-1"}); err != nil {
+			t.Fatalf("runIssueCommentList: %v", err)
+		}
+
+		stderrStr := stderr.read()
+		if !strings.Contains(stderrStr, "Showing 1 comments.") {
+			t.Errorf("stderr should contain 'Showing 1 comments.' in table mode, got: %q", stderrStr)
+		}
+		if !strings.Contains(stderrStr, "Next thread cursor:") {
+			t.Errorf("stderr should contain cursor hint in table mode, got: %q", stderrStr)
+		}
+	})
+
+	t.Run("json_mode_no_cursor_no_stderr", func(t *testing.T) {
+		noCursorSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/issues/") && !strings.Contains(r.URL.Path, "/comments") {
+				json.NewEncoder(w).Encode(map[string]any{
+					"id":         "issue-1",
+					"identifier": "MUL-1",
+				})
+				return
+			}
+			w.Write([]byte(`[{"id":"c1","content":"hello"}]`))
+		}))
+		defer noCursorSrv.Close()
+
+		t.Setenv("MULTICA_SERVER_URL", noCursorSrv.URL)
+
+		stderr := captureStderr(t)
+		defer stderr.restore()
+		stdout := captureStdout(t)
+		defer stdout.restore()
+
+		cmd := newIssueCommentListTestCmd()
+		if err := cmd.Flags().Set("output", "json"); err != nil {
+			t.Fatalf("set output: %v", err)
+		}
+		if err := runIssueCommentList(cmd, []string{"MUL-1"}); err != nil {
+			t.Fatalf("runIssueCommentList: %v", err)
+		}
+
+		stderrStr := stderr.read()
+		stdoutStr := stdout.read()
+
+		if stderrStr != "" {
+			t.Errorf("stderr should be empty in JSON mode with no cursor, got: %q", stderrStr)
+		}
+		if !json.Valid([]byte(stdoutStr)) {
+			t.Errorf("stdout is not valid JSON, got: %q", stdoutStr)
+		}
+	})
+}
+
 func TestValidIssueStatuses(t *testing.T) {
 	expected := map[string]bool{
 		"backlog":     true,

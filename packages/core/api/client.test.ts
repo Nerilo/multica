@@ -114,6 +114,73 @@ describe("ApiClient", () => {
     ]);
   });
 
+  it("uses the expected HTTP contract for skill set endpoints", async () => {
+    const summary = {
+      id: "set-1",
+      workspace_id: "ws-1",
+      name: "Frontend Review",
+      description: "Reusable review context",
+      skill_count: 2,
+      created_by: "user-1",
+      created_at: "2026-05-29T00:00:00Z",
+      updated_at: "2026-05-29T00:00:00Z",
+    };
+    const detail = { ...summary, skills: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([summary]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(detail), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(detail), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("https://api.example.test");
+
+    await expect(client.listSkillSets()).resolves.toEqual([summary]);
+    await expect(client.getSkillSet("set-1")).resolves.toEqual(detail);
+    await expect(
+      client.createSkillSet({
+        name: "Frontend Review",
+        description: "Reusable review context",
+        skill_ids: ["skill-1", "skill-2"],
+      }),
+    ).resolves.toEqual(detail);
+
+    const calls = fetchMock.mock.calls.map(([url, init]) => ({
+      url,
+      method: init?.method ?? "GET",
+      body: init?.body,
+    }));
+
+    expect(calls).toEqual([
+      { url: "https://api.example.test/api/skill-sets", method: "GET", body: undefined },
+      { url: "https://api.example.test/api/skill-sets/set-1", method: "GET", body: undefined },
+      {
+        url: "https://api.example.test/api/skill-sets",
+        method: "POST",
+        body: JSON.stringify({
+          name: "Frontend Review",
+          description: "Reusable review context",
+          skill_ids: ["skill-1", "skill-2"],
+        }),
+      },
+    ]);
+  });
+
   it("emits X-Client-* headers when identity is configured", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify([]), {

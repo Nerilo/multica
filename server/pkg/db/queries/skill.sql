@@ -110,3 +110,37 @@ FROM agent_skill ask
 JOIN skill s ON s.id = ask.skill_id
 WHERE s.workspace_id = $1
 ORDER BY s.name ASC;
+
+-- Skill Set CRUD
+
+-- name: ListSkillSetsByWorkspace :many
+SELECT ss.*, COUNT(ssk.skill_id)::int AS skill_count
+FROM skill_set ss
+LEFT JOIN skill_set_skill ssk ON ssk.skill_set_id = ss.id
+WHERE ss.workspace_id = $1
+GROUP BY ss.id
+ORDER BY ss.name ASC;
+
+-- name: GetSkillSet :one
+SELECT * FROM skill_set
+WHERE id = $1;
+
+-- name: GetSkillSetInWorkspace :one
+SELECT * FROM skill_set
+WHERE id = $1 AND workspace_id = $2;
+
+-- name: CreateSkillSet :one
+INSERT INTO skill_set (workspace_id, name, description, created_by)
+VALUES ($1, $2, $3, $4)
+RETURNING *;
+
+-- name: AddSkillSetSkill :exec
+INSERT INTO skill_set_skill (skill_set_id, skill_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING;
+
+-- name: ListSkillSetSkills :many
+SELECT s.* FROM skill s
+JOIN skill_set_skill ssk ON ssk.skill_id = s.id
+WHERE ssk.skill_set_id = $1
+ORDER BY s.name ASC;

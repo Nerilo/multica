@@ -5,6 +5,7 @@ import {
   AlertCircle,
   AlertTriangle,
   BookOpen,
+  Boxes,
   Plus,
   Search,
 } from "lucide-react";
@@ -12,6 +13,7 @@ import type {
   AgentRuntime,
   MemberWithUser,
   Skill,
+  SkillSetSummary,
   SkillSummary,
 } from "@multica/core/types";
 import { useQuery } from "@tanstack/react-query";
@@ -24,6 +26,7 @@ import {
   memberListOptions,
   selectSkillAssignments,
   skillListOptions,
+  skillSetListOptions,
 } from "@multica/core/workspace/queries";
 import { runtimeListOptions } from "@multica/core/runtimes";
 import { Button } from "@multica/ui/components/ui/button";
@@ -40,6 +43,7 @@ import { PageHeader } from "../../layout/page-header";
 import { canEditSkill } from "../hooks/use-can-edit-skill";
 import { readOrigin } from "../lib/origin";
 import { CreateSkillDialog } from "./create-skill-dialog";
+import { CreateSkillSetDialog } from "./create-skill-set-dialog";
 import { type SkillRow, useSkillColumns } from "./skill-columns";
 import { useT } from "../../i18n";
 
@@ -169,6 +173,70 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   );
 }
 
+function SkillSetsSection({
+  skillSets,
+  loading,
+  onCreate,
+}: {
+  skillSets: SkillSetSummary[];
+  loading: boolean;
+  onCreate: () => void;
+}) {
+  const { t } = useT("skills");
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Boxes className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">{t(($) => $.skill_sets.title)}</h2>
+          {skillSets.length > 0 && (
+            <span className="font-mono text-xs tabular-nums text-muted-foreground/70">
+              {skillSets.length}
+            </span>
+          )}
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={onCreate}>
+          <Plus className="h-3 w-3" />
+          {t(($) => $.skill_sets.new)}
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-lg" />
+          ))}
+        </div>
+      ) : skillSets.length === 0 ? (
+        <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+          {t(($) => $.skill_sets.empty)}
+        </div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {skillSets.map((skillSet) => (
+            <div
+              key={skillSet.id}
+              className="rounded-lg border bg-card p-4 text-card-foreground"
+            >
+              <div className="truncate text-sm font-medium">{skillSet.name}</div>
+              {skillSet.description ? (
+                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                  {skillSet.description}
+                </p>
+              ) : null}
+              <div className="mt-3 text-xs text-muted-foreground">
+                {t(($) => $.skill_sets.skill_count, {
+                  count: skillSet.skill_count,
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -195,10 +263,14 @@ export default function SkillsPage() {
   const { data: runtimes = [], error: runtimesError } = useQuery(
     runtimeListOptions(wsId),
   );
+  const { data: skillSets = [], isLoading: skillSetsLoading } = useQuery(
+    skillSetListOptions(wsId),
+  );
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [createOpen, setCreateOpen] = useState(false);
+  const [skillSetCreateOpen, setSkillSetCreateOpen] = useState(false);
 
   const assignments = useMemo(
     () => selectSkillAssignments(agents),
@@ -374,6 +446,11 @@ export default function SkillsPage() {
             </span>
           </div>
         )}
+        <SkillSetsSection
+          skillSets={skillSets}
+          loading={skillSetsLoading}
+          onCreate={() => setSkillSetCreateOpen(true)}
+        />
         {showEmpty ? (
           <div className="flex flex-1 items-center justify-center">
             <EmptyState onCreate={() => setCreateOpen(true)} />
@@ -420,6 +497,9 @@ export default function SkillsPage() {
           onClose={() => setCreateOpen(false)}
           onCreated={handleCreated}
         />
+      )}
+      {skillSetCreateOpen && (
+        <CreateSkillSetDialog onClose={() => setSkillSetCreateOpen(false)} />
       )}
     </div>
   );

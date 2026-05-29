@@ -38,6 +38,9 @@ import type {
   CreateSkillRequest,
   UpdateSkillRequest,
   SetAgentSkillsRequest,
+  SkillSet,
+  SkillSetSummary,
+  CreateSkillSetRequest,
   PersonalAccessToken,
   CreatePersonalAccessTokenRequest,
   CreatePersonalAccessTokenResponse,
@@ -180,6 +183,10 @@ import {
   EMPTY_CREATE_BILLING_CHECKOUT_SESSION_RESPONSE,
   EMPTY_BILLING_CHECKOUT_SESSION_STATUS,
   EMPTY_CREATE_BILLING_PORTAL_SESSION_RESPONSE,
+  EMPTY_SKILL_SET,
+  EMPTY_SKILL_SET_LIST,
+  SkillSetListSchema,
+  SkillSetResponseSchema,
 } from "./schemas";
 
 /** Identifies the calling client to the server.
@@ -1506,6 +1513,30 @@ export class ApiClient {
     await this.fetch(`/api/agents/${agentId}/skills`, {
       method: "PUT",
       body: JSON.stringify(data),
+    });
+  }
+
+  async listSkillSets(): Promise<SkillSetSummary[]> {
+    const raw = await this.fetch<unknown>("/api/skill-sets");
+    return parseWithFallback(raw, SkillSetListSchema, EMPTY_SKILL_SET_LIST, {
+      endpoint: "GET /api/skill-sets",
+    });
+  }
+
+  async getSkillSet(id: string): Promise<SkillSet> {
+    const raw = await this.fetch<unknown>(`/api/skill-sets/${id}`);
+    return parseWithFallback(raw, SkillSetResponseSchema, EMPTY_SKILL_SET, {
+      endpoint: "GET /api/skill-sets/:id",
+    });
+  }
+
+  async createSkillSet(data: CreateSkillSetRequest): Promise<SkillSet> {
+    const raw = await this.fetch<unknown>("/api/skill-sets", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return parseWithFallback(raw, SkillSetResponseSchema, EMPTY_SKILL_SET, {
+      endpoint: "POST /api/skill-sets",
     });
   }
 

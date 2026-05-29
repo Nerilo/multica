@@ -432,6 +432,41 @@ export interface SetAgentSkillsRequest {
   skill_ids: string[];
 }
 
+export interface SkillSetSummary {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string;
+  skill_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillSet extends SkillSetSummary {
+  skills: SkillSummary[];
+}
+
+export interface CreateSkillSetRequest {
+  name: string;
+  description?: string;
+  skill_ids: string[];
+}
+
+export interface UpdateSkillSetRequest {
+  name?: string;
+  description?: string;
+}
+
+export interface SetSkillSetSkillsRequest {
+  skill_ids: string[];
+}
+
+export interface ApplySkillSetRequest {
+  agent_id: string;
+  mode: "merge" | "replace";
+}
+
 export interface IssueUsageSummary {
   total_input_tokens: number;
   total_output_tokens: number;

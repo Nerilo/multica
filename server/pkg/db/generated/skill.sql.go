@@ -27,6 +27,22 @@ func (q *Queries) AddAgentSkill(ctx context.Context, arg AddAgentSkillParams) er
 	return err
 }
 
+const addSkillSetSkill = `-- name: AddSkillSetSkill :exec
+INSERT INTO skill_set_skill (skill_set_id, skill_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type AddSkillSetSkillParams struct {
+	SkillSetID pgtype.UUID `json:"skill_set_id"`
+	SkillID    pgtype.UUID `json:"skill_id"`
+}
+
+func (q *Queries) AddSkillSetSkill(ctx context.Context, arg AddSkillSetSkillParams) error {
+	_, err := q.db.Exec(ctx, addSkillSetSkill, arg.SkillSetID, arg.SkillID)
+	return err
+}
+
 const createSkill = `-- name: CreateSkill :one
 INSERT INTO skill (workspace_id, name, description, content, config, created_by)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -59,6 +75,39 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (Skill
 		&i.Description,
 		&i.Content,
 		&i.Config,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createSkillSet = `-- name: CreateSkillSet :one
+INSERT INTO skill_set (workspace_id, name, description, created_by)
+VALUES ($1, $2, $3, $4)
+RETURNING id, workspace_id, name, description, created_by, created_at, updated_at
+`
+
+type CreateSkillSetParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	CreatedBy   pgtype.UUID `json:"created_by"`
+}
+
+func (q *Queries) CreateSkillSet(ctx context.Context, arg CreateSkillSetParams) (SkillSet, error) {
+	row := q.db.QueryRow(ctx, createSkillSet,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Description,
+		arg.CreatedBy,
+	)
+	var i SkillSet
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -191,6 +240,51 @@ func (q *Queries) GetSkillInWorkspace(ctx context.Context, arg GetSkillInWorkspa
 		&i.Description,
 		&i.Content,
 		&i.Config,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSkillSet = `-- name: GetSkillSet :one
+SELECT id, workspace_id, name, description, created_by, created_at, updated_at FROM skill_set
+WHERE id = $1
+`
+
+func (q *Queries) GetSkillSet(ctx context.Context, id pgtype.UUID) (SkillSet, error) {
+	row := q.db.QueryRow(ctx, getSkillSet, id)
+	var i SkillSet
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSkillSetInWorkspace = `-- name: GetSkillSetInWorkspace :one
+SELECT id, workspace_id, name, description, created_by, created_at, updated_at FROM skill_set
+WHERE id = $1 AND workspace_id = $2
+`
+
+type GetSkillSetInWorkspaceParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) GetSkillSetInWorkspace(ctx context.Context, arg GetSkillSetInWorkspaceParams) (SkillSet, error) {
+	row := q.db.QueryRow(ctx, getSkillSetInWorkspace, arg.ID, arg.WorkspaceID)
+	var i SkillSet
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -351,6 +445,94 @@ func (q *Queries) ListSkillFiles(ctx context.Context, skillID pgtype.UUID) ([]Sk
 			&i.Content,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillSetSkills = `-- name: ListSkillSetSkills :many
+SELECT s.id, s.workspace_id, s.name, s.description, s.content, s.config, s.created_by, s.created_at, s.updated_at FROM skill s
+JOIN skill_set_skill ssk ON ssk.skill_id = s.id
+WHERE ssk.skill_set_id = $1
+ORDER BY s.name ASC
+`
+
+func (q *Queries) ListSkillSetSkills(ctx context.Context, skillSetID pgtype.UUID) ([]Skill, error) {
+	rows, err := q.db.Query(ctx, listSkillSetSkills, skillSetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Skill{}
+	for rows.Next() {
+		var i Skill
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Description,
+			&i.Content,
+			&i.Config,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillSetsByWorkspace = `-- name: ListSkillSetsByWorkspace :many
+
+SELECT ss.id, ss.workspace_id, ss.name, ss.description, ss.created_by, ss.created_at, ss.updated_at, COUNT(ssk.skill_id)::int AS skill_count
+FROM skill_set ss
+LEFT JOIN skill_set_skill ssk ON ssk.skill_set_id = ss.id
+WHERE ss.workspace_id = $1
+GROUP BY ss.id
+ORDER BY ss.name ASC
+`
+
+type ListSkillSetsByWorkspaceRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	CreatedBy   pgtype.UUID        `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	SkillCount  int32              `json:"skill_count"`
+}
+
+// Skill Set CRUD
+func (q *Queries) ListSkillSetsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]ListSkillSetsByWorkspaceRow, error) {
+	rows, err := q.db.Query(ctx, listSkillSetsByWorkspace, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSkillSetsByWorkspaceRow{}
+	for rows.Next() {
+		var i ListSkillSetsByWorkspaceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SkillCount,
 		); err != nil {
 			return nil, err
 		}

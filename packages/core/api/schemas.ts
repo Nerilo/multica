@@ -20,6 +20,8 @@ import type {
   TimelineEntry,
   User,
   WebhookDelivery,
+  SkillSet,
+  SkillSetSummary,
 } from "../types";
 import type { CloudRuntimeNode } from "../runtimes/cloud-runtime";
 
@@ -249,6 +251,48 @@ export const EMPTY_CLOUD_RUNTIME_NODE: CloudRuntimeNode = {
   metadata: {},
   created_at: "",
   updated_at: "",
+};
+
+export const SkillSetSummarySchema = z.object({
+  id: z.string(),
+  workspace_id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  skill_count: z.number(),
+  created_by: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+}).loose();
+
+export const SkillSummarySchema = z.object({
+  id: z.string(),
+  workspace_id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  config: z.unknown().optional(),
+  created_by: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+}).loose();
+
+export const SkillSetResponseSchema = SkillSetSummarySchema.extend({
+  skills: z.array(SkillSummarySchema).default([]),
+}).loose();
+
+export const SkillSetListSchema = z.array(SkillSetSummarySchema);
+
+export const EMPTY_SKILL_SET_LIST: SkillSetSummary[] = [];
+
+export const EMPTY_SKILL_SET: SkillSet = {
+  id: "",
+  workspace_id: "",
+  name: "",
+  description: "",
+  skill_count: 0,
+  created_by: "",
+  created_at: "",
+  updated_at: "",
+  skills: [],
 };
 
 // ---------------------------------------------------------------------------

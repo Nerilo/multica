@@ -16,6 +16,7 @@ export const workspaceKeys = {
   squadMemberStatus: (wsId: string, squadId: string) =>
     ["workspaces", wsId, "squads", squadId, "members-status"] as const,
   skills: (wsId: string) => ["workspaces", wsId, "skills"] as const,
+  skillSets: (wsId: string) => ["workspaces", wsId, "skill-sets"] as const,
   assigneeFrequency: (wsId: string) => ["workspaces", wsId, "assignee-frequency"] as const,
 };
 
@@ -83,6 +84,22 @@ export function skillDetailOptions(wsId: string, skillId: string) {
     queryKey: [...workspaceKeys.skills(wsId), skillId] as const,
     queryFn: () => api.getSkill(skillId),
     enabled: !!skillId,
+  });
+}
+
+export function skillSetListOptions(wsId: string) {
+  return queryOptions({
+    queryKey: workspaceKeys.skillSets(wsId),
+    queryFn: () => api.listSkillSets(),
+    enabled: !!wsId,
+  });
+}
+
+export function skillSetDetailOptions(wsId: string, skillSetId: string) {
+  return queryOptions({
+    queryKey: [...workspaceKeys.skillSets(wsId), skillSetId] as const,
+    queryFn: () => api.getSkillSet(skillSetId),
+    enabled: !!wsId && !!skillSetId,
   });
 }
 

@@ -34,6 +34,27 @@
     },
     "supporting_data_warning": "Some workspace data failed to load. Creator attribution, runtime names, or edit permissions may appear incomplete."
   },
+  "skill_sets": {
+    "title": "Skill Sets",
+    "new": "New",
+    "empty": "Group existing skills into reusable sets for agents.",
+    "skill_count": "{{count}} skills",
+    "create": {
+      "title": "New skill set",
+      "name_label": "Name",
+      "name_placeholder": "Frontend review",
+      "description_label": "Description",
+      "description_placeholder": "When should an agent use this set?",
+      "skills_label": "Skills",
+      "skills_empty": "No skills in this workspace yet.",
+      "skills_no_match": "No skills match.",
+      "cancel": "Cancel",
+      "create": "Create",
+      "creating": "Creating…",
+      "toast_created": "Skill set created",
+      "fallback_error": "Failed to create skill set"
+    }
+  },
   "table": {
     "name": "Name",
     "used_by": "Used by",
